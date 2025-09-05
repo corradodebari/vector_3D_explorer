@@ -6,4 +6,4 @@ export PASSWORD="vector"
 export TABLE="OLLAMA_MXBAI_EMBED_LARGE_8192_1639_COSINE_HNSW"
 export TOPK=5
 python3.11 vector_3d_explorer.py
-#python3.11 3d_vector.py
+
