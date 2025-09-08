@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Corrado De Bari 
+# Released under the MIT License. 
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """

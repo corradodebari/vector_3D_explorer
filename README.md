@@ -192,5 +192,6 @@ python vector_3d_explorer.py  --dsn "localhost:1521/FREEPDB1" --user "vector" --
 
 --
 
-© 2025 Corrado De Bari 
-Released under the MIT License. 
+**Copyright (c) 2025 Corrado De Bari** 
+
+Released under the MIT License.
