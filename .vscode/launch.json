@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug 3d",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/vector_3d_explorer.py",
+      "python": "${workspaceFolder}/.venv/bin/python", // or .venv\Scripts\python.exe on Windows
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    }
+  ]
+}

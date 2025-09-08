@@ -47,6 +47,8 @@ class Config:
         parser.add_argument('--distance-metric-default', default="COSINE", help='Distance metric default')
         parser.add_argument('--topk', type=int, default=int(os.environ.get("TOPK", "4")), help='Top K')
         parser.add_argument('--subset-dim', type=int, default=int(os.environ.get("SUBSET_DIM", "100")), help='Subset table')
+        parser.add_argument('--subset-dim-plot', type=int, default=int(os.environ.get("SUBSET_DIM_PLOT", "50")), help='Subset plot table')
+       
         args = parser.parse_args()
 
         self.dsn = args.dsn
@@ -55,9 +57,10 @@ class Config:
         self.table = args.table
         self.distance_metric_default = args.distance_metric_default
         self.topk = args.topk + 1  # +1 to exclude the query point
-        self.pca_fit_rows = args.subset_dim #subset dim: must be the same in this version
-        self.plot_rows = args.subset_dim #how many plot: must be the same in this version
+        self.pca_fit_rows = args.subset_dim #subset size to be used to create model
+        self.plot_rows = args.subset_dim_plot #how many vectors to be plotted (less than "subset_dim" ). Around 100 to avoid python crash
         self.lib_dir: str = os.environ.get("LIB_DIR", os.path.expanduser("~/instantclient_23_3"))
+        self.seed = "42" #to plot/sample always the same random distributed sequence to compare analysis
         
 CFG = Config()
 
@@ -121,13 +124,13 @@ def create_pca_view(base_table: str) -> str:
     query_create_sample = f"""
         CREATE TABLE {table_vect} AS
         SELECT 
-            SUBSTR(RAWTOHEX(ID), 1, 16) AS ID,
+            RAWTOHEX(ID) AS ID,
             EMBEDDING,
             TEXT
         FROM (
             SELECT *
             FROM {base_table}
-            ORDER BY DBMS_RANDOM.VALUE
+            ORDER BY STANDARD_HASH(ID || '{CFG.seed}', 'SHA1')
         )
         FETCH FIRST {CFG.pca_fit_rows} ROWS ONLY
     """
@@ -208,18 +211,23 @@ def get_random_vectors(view_name: str, n: int) -> List[Dict[str, object]]:
     """
     _init_oracle()
     sampled_view = f"SAMPLED_{view_name}"
+
     create_sampled_view = f"""
-        CREATE OR REPLACE VIEW {sampled_view} AS
+        CREATE TABLE {sampled_view} AS
         SELECT *
         FROM (
             SELECT *
             FROM {view_name}
-            ORDER BY DBMS_RANDOM.VALUE
+            ORDER BY STANDARD_HASH(ID || '{CFG.seed}', 'SHA1')
         )
         FETCH FIRST {n} ROWS ONLY
-    """
+        """
+
     with oracledb.connect(dsn=CFG.dsn, user=CFG.user, password=CFG.password) as conn:
         with conn.cursor() as cur:
+            cur.execute(sql_drop_if_exists(f"SAMPLED_{view_name}", "TABLE"))
+            conn.commit()
+
             cur.execute(create_sampled_view)
             conn.commit()
             cur.execute(f"SELECT * FROM {sampled_view}")
@@ -383,7 +391,7 @@ class VectorExplorer:
                     fontsize=8, color="black", ha="left", va="top")
 
         # Nearest neighbors (exclude the selected itself)
-        nn = nearest_ids(self.table_vect, sel_id, self.distance_metric, CFG.topk)
+        nn = nearest_ids(f"SAMPLED_{self.view_reduced}", sel_id, self.distance_metric, CFG.topk)
         nn = [n for n in nn if n != sel_id]
 
         n_x, n_y, n_z = [], [], []
@@ -442,12 +450,13 @@ def main() -> None:
     try:
         # Not all backends/managers support resize; guard it
         manager = plt.get_current_fig_manager()
-        manager.resize(int(CFG.screen_width * 0.8), int(CFG.screen_height * 0.8))
         manager.set_window_title("Vector 3D Explorer")  # Set the window title
+        manager.resize(int(CFG.screen_width * 0.8), int(CFG.screen_height * 0.8))
     except Exception:
         pass
 
     ax = fig.add_subplot(projection="3d")
+
     logger.info("Building explorer for table: %s", CFG.table)
     explorer = VectorExplorer(CFG.table, CFG.pca_fit_rows, CFG.plot_rows, fig, ax)
 
