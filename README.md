@@ -1,4 +1,4 @@
-# vector_3D_explorer
+# Vector 3D explorer
 
 *An interactive 3D explorer for vector embeddings stored in **Oracle DB 23ai**, using **Oracle Machine Learning** in-database models.*
 
