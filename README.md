@@ -12,7 +12,7 @@ Inspired by the examples in this [blog post](https://blogs.oracle.com/machinelea
 
 This is primarily an educational exercise to illustrate how OML can be re-imagined in the era of vector stores. More examples will follow.
 
-![Application GUI](./images/3dExplorer.gif)
+<img src="./images/vector_3d_explorer.png" width="800">
 
 ---
 
@@ -162,9 +162,10 @@ FETCH EXACT FIRST {n} ROWS ONLY;
 
 
 ### Final chart:
-In green the TopK chunks retrieved nearer the vector selected, and in the top left corner the text content of selected vector:
+In green the TopK chunks retrieved nearer the vector selected, and in the top left corner the text content of a selected vector:
 
-<img src="./images/vector_3d_explorer.png" width="800">
+![Application GUI](./images/3dExplorer.gif)
+
 
 ---
 
