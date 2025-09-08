@@ -22,6 +22,7 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.widgets import RadioButtons
+import matplotlib.colors as mcolors
 import argparse
 
 
@@ -186,6 +187,61 @@ def create_pca_view(base_table: str) -> str:
 
     return view_reduced
 
+def create_cluster(table="",top_k= 3):
+
+    queryRanks=f"""
+            SELECT ID
+            FROM {table}
+            ORDER BY VECTOR_DISTANCE(
+                embedding, 
+                (SELECT embedding FROM {table} WHERE ID = :1), 
+                {CFG.distance_metric_default}
+            )
+            FETCH EXACT FIRST {top_k} ROWS ONLY
+            """
+    checkModelExist = f"""
+            SELECT COUNT(*) 
+            FROM ALL_MINING_MODELS 
+            WHERE MODEL_NAME = '{table}_KM_SH_CLUS1'
+    """
+    removeCluster=f"""
+    BEGIN DBMS_DATA_MINING.DROP_MODEL('{table}_KM_SH_CLUS1');
+    EXCEPTION WHEN OTHERS THEN NULL; END;
+    """
+
+    queryCluster=f"""
+    DECLARE
+        v_setlist DBMS_DATA_MINING.SETTING_LIST;
+    BEGIN
+        v_setlist('ALGO_NAME')        := 'ALGO_KMEANS';
+    V_setlist('PREP_AUTO')        := 'ON';
+    V_setlist('KMNS_DISTANCE')    := 'KMNS_EUCLIDEAN';
+    V_setlist('KMNS_DETAILS')     := 'KMNS_DETAILS_ALL';
+    V_setlist('KMNS_ITERATIONS')  := '10';
+    V_setlist('KMNS_NUM_BINS')    := '10';
+    v_setlist('CLUS_NUM_CLUSTERS'):= '{top_k}';
+ 
+    DBMS_DATA_MINING.CREATE_MODEL2(
+        MODEL_NAME          => '{table}_KM_SH_CLUS1',
+        MINING_FUNCTION     => 'CLUSTERING',
+        DATA_QUERY          => 'select embedding from {table}',
+        SET_LIST            => v_setlist,
+        CASE_ID_COLUMN_NAME => NULL);
+    END;
+    """
+    with oracledb.connect(dsn=CFG.dsn,user=CFG.user,password=CFG.password) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(checkModelExist)
+            result = cursor.fetchone()
+            if result[0] > 0:
+                cursor.execute(removeCluster)
+                connection.commit()
+            cursor.execute(queryCluster)
+            connection.commit()
+
+
+
+
 def get_cluster_map(table: str, model: str = "KM_SH_CLUS1") -> Dict[str, int]:
     """
     Returns mapping: ID -> cluster_id from an existing clustering model.
@@ -295,9 +351,12 @@ class VectorExplorer:
         self.view_reduced = create_pca_view(base_table)
 
         # Load cluster map for coloring
-        cluster_map = get_cluster_map(self.view_reduced, "KM_SH_CLUS1")
+        create_cluster(table=self.view_reduced,top_k= 3)
+
+        # Load cluster map for coloring
+        cluster_map = get_cluster_map(self.view_reduced, f"{self.view_reduced}_KM_SH_CLUS1")
         unique_clusters = sorted(set(cluster_map.values()))
-        palette = ["blue", "green", "brown", "yellow", "purple", "cyan", "magenta", "orange", "grey"]
+        palette = ["blue", "green", "darkorange", "magenta", "purple", "brown", "yellow", "orange", "grey"]
         self.color_by_cluster = {
             c: palette[i % len(palette)] for i, c in enumerate(unique_clusters)
         }
@@ -328,7 +387,7 @@ class VectorExplorer:
             marker="o",
             c=self.colors,
         )
-        self.highlight = self.ax.scatter([], [], [], color="red", s=70)
+        self.highlight = self.ax.scatter([], [], [], color="red", s=200)
         self.annotations: List[plt.Text] = []
 
         self.distance_metric = CFG.distance_metric_default.upper()
@@ -430,7 +489,7 @@ class VectorExplorer:
 
     def _update_highlight(self, xs: Sequence[float], ys: Sequence[float], zs: Sequence[float]) -> None:
         self.highlight.remove()
-        self.highlight = self.ax.scatter(xs, ys, zs, color="red", s=50)
+        self.highlight = self.ax.scatter(xs, ys, zs, color="red", s=150)
 
     def _point_by_id(self, id_: str) -> Tuple[float, float, float] | None:
         # Reverse lookup (build a tiny index once for convenience)
