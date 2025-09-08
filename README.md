@@ -57,3 +57,16 @@ CREATE OR REPLACE VIEW {view_reduced} AS
         FROM {table_vect}
 ```
 
+
+## Getting Started
+
+1. Set Oracle DB instant client dir you can get from [here](https://www.oracle.com/database/technologies/instant-client/downloads.html). Ex.:
+
+    ```
+    export = export LIB_DIR="/Users/cdebari/instantclient_23_3"
+    ```
+
+2. Start by command-line or setting a [start](start.sh) shell script :
+    ```
+    python vector_3d_explorer.py --dsn "localhost:1521/FREEPDB1" --user "vector" --password "vector" --table "OLLAMA_MXBAI_EMBED_LARGE_8192_1639_COSINE_HNSW" --distance-metric-default "EUCLIDEAN" --topk 10 --subset-dim 100
+    ```

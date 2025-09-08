@@ -22,6 +22,8 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.widgets import RadioButtons
+import argparse
+
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -35,19 +37,28 @@ logger = logging.getLogger("vector_explorer")
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
-@dataclass(frozen=True)
 class Config:
-    lib_dir: str = os.environ.get("LIB_DIR", os.path.expanduser("~/instantclient_23_3"))
-    dsn: str = os.environ.get("DSN", "localhost:1521/FREEPDB1")
-    user: str = os.environ.get("USERID", "vector")
-    password: str = os.environ.get("PASSWORD", "vector")
-    table: str = os.environ.get("TABLE", "OLLAMA_MXBAI_EMBED_LARGE_512_103_COSINE_HNSW")
-    distance_metric_default: str = os.environ.get("DISTANCE_METRIC", "COSINE")
-    topk: int = int(os.environ.get("TOPK", "4")) + 1  # +1 to exclude the query point
-    subset_dim: int = int(os.environ.get("SUBSET_DIM", "100"))
-    screen_width: int = int(os.environ.get("SCREEN_WIDTH", "4096"))
-    screen_height: int = int(os.environ.get("SCREEN_HEIGHT", "2048"))
+    def __init__(self):
+        parser = argparse.ArgumentParser(description='Your application')
+        parser.add_argument('--dsn', default=os.environ.get("DSN", "localhost:1521/FREEPDB1"), help='DSN')
+        parser.add_argument('--user', default=os.environ.get("USERID", "vector"), help='User ID')
+        parser.add_argument('--password', default=os.environ.get("PASSWORD", "vector"), help='Password')
+        parser.add_argument('--table', default=os.environ.get("TABLE", "LANGCHAIN_VECTOR_STORE"), help='Table name')
+        parser.add_argument('--distance-metric-default', default="COSINE", help='Distance metric default')
+        parser.add_argument('--topk', type=int, default=int(os.environ.get("TOPK", "4")), help='Top K')
+        parser.add_argument('--subset-dim', type=int, default=int(os.environ.get("SUBSET_DIM", "100")), help='Subset table')
+        args = parser.parse_args()
 
+        self.dsn = args.dsn
+        self.user = args.user
+        self.password = args.password
+        self.table = args.table
+        self.distance_metric_default = args.distance_metric_default
+        self.topk = args.topk + 1  # +1 to exclude the query point
+        self.pca_fit_rows = args.subset_dim #subset dim: must be the same in this version
+        self.plot_rows = args.subset_dim #how many plot: must be the same in this version
+        self.lib_dir: str = os.environ.get("LIB_DIR", os.path.expanduser("~/instantclient_23_3"))
+        
 CFG = Config()
 
 # One-time Oracle client init (safe to call multiple times; we guard anyway).
@@ -118,7 +129,7 @@ def create_pca_view(base_table: str) -> str:
             FROM {base_table}
             ORDER BY DBMS_RANDOM.VALUE
         )
-        FETCH FIRST {CFG.subset_dim} ROWS ONLY
+        FETCH FIRST {CFG.pca_fit_rows} ROWS ONLY
     """
 
     query_create_model = f"""
@@ -268,21 +279,23 @@ def project_3d_to_2d(ax: Axes, x: float, y: float, z: float) -> Tuple[float, flo
 # Interactive app
 # -----------------------------------------------------------------------------
 class VectorExplorer:
-    def __init__(self, base_table: str, subset: int, fig: Figure, ax: Axes):
+    def __init__(self, base_table: str, subset: int, plot_subset:int, fig: Figure, ax: Axes):
         self.base_table = base_table
         self.table_vect = f"{base_table}_VECT"
+
+        #Create a subset of original vectors, the PCA model, apply on a new view
         self.view_reduced = create_pca_view(base_table)
 
         # Load cluster map for coloring
         cluster_map = get_cluster_map(self.view_reduced, "KM_SH_CLUS1")
         unique_clusters = sorted(set(cluster_map.values()))
-        palette = ["blue", "green", "orange", "yellow", "purple", "cyan", "magenta", "grey", "brown"]
+        palette = ["blue", "green", "brown", "yellow", "purple", "cyan", "magenta", "orange", "grey"]
         self.color_by_cluster = {
             c: palette[i % len(palette)] for i, c in enumerate(unique_clusters)
         }
 
-        # Sample points
-        rows = get_random_vectors(self.view_reduced, subset)
+        # Sample points for plottinf
+        rows = get_random_vectors(self.view_reduced, plot_subset)
         self.points: List[Tuple[float, float, float]] = []
         self.id_for_point: Dict[Tuple[float, float, float], str] = {}
         self.text_for_point: Dict[Tuple[float, float, float], str] = {}
@@ -436,7 +449,7 @@ def main() -> None:
 
     ax = fig.add_subplot(projection="3d")
     logger.info("Building explorer for table: %s", CFG.table)
-    explorer = VectorExplorer(CFG.table, CFG.subset_dim, fig, ax)
+    explorer = VectorExplorer(CFG.table, CFG.pca_fit_rows, CFG.plot_rows, fig, ax)
 
     plt.show()
 
